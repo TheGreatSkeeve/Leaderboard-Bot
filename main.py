@@ -1,101 +1,86 @@
-from logger import *
 from time import sleep
-import praw
-from pathlib import Path
+from operator import itemgetter
+from datetime import datetime
 
-# Set the name and location of the database
-dbname = "info.db"
-dbfolder = "db/"
+from secret import *
 
-# Initialize a variable to store leaderboard stats in
-leaderboard_dict = {}
-
-# This makes the database folder if it doesn't exist
-Path(dbfolder).mkdir(parents=True, exist_ok=True)
-
-
-# Bot's username
-bot_username = "SimonSkinnerBot"
-
-# Admin
-consoleoutput = ["\nLeaderboard bot is running\n"] # Strings to print to the console to help with general awareness
-
-# Sign into Reddit
-# Using another bot of mine to test, too lazy to make a new one
-reddit = praw.Reddit(
-    client_id="",
-    client_secret="",
-    password="",
-    user_agent="TheGreatSkeeve_",
-    username=bot_username
-)
-
-# Set the subreddit to read comments / posts from
 target_sub = "the_greater_good"
 subreddit = reddit.subreddit(target_sub)
 
 
 
-# Function to send a message to Telegram group configured in the SECRETS.py file
-def sendMessage(message):
+
+def getWidget():
+    widgets = reddit.subreddit("the_greater_good").widgets
+    text_area = [None,None,None]
+    for widget in widgets.sidebar:
+        if isinstance(widget, praw.models.TextArea):
+            if widget.shortName == "Post Leaderboard (Weekly)":
+                text_area[0] = widget
+            if widget.shortName == "Comment Leaderboard (Weekly)":
+                text_area[1] = widget
+            if widget.shortName == "Post Leaderboard (Daily)":
+                text_area[2] = widget
+    return text_area
+
+
+def getPosts(timerange):
+    timed = datetime.now().strftime("%H:%M:%S")
+    status = "\n\n"+"Last updated: Today at "+timed
+    Header = '|User|Score|\n|:-:|:-:|\n'
+    info = []
+    for submission in reddit.subreddit("pantypeel").top(timerange,limit=250):
+        if submission.score > 100:
+            info.append([str(submission.author),submission.score,str(submission.url)])
+    submissions_Top = sorted(info, key=itemgetter(1),reverse=True)
+    info = []
+    for submission in submissions_Top:
+        user="u/"+submission[0]
+        score=str(submission[1])
+        url=submission[2]
+        row=user+"|["+score+"]("+url+")\n"
+        info.append(row)
+    for i in range(0,len(info)):
+        Header = Header + info[i]
+    Header = Header+status
+    return Header
+
+def healthCheckerPing():
     import requests
-    msg1 = "https://api.telegram.org/bot"
-    msg2 = "/sendMessage?chat_id="
-    msg3 = "&text="
-    URL = msg1+token+msg2+chatid+msg3+message
-    r = requests.get(url=URL)
+    url = "https://hc-ping.com/86d42e5c-5ec3-4e48-89f0-9e9a7c2834b6"
+    requests.get(url)
+
+def getComments(posts,timescale,subreddit,scorelimit):
+    timed = datetime.now().strftime("%H:%M:%S")
+    status = "\n\n"+"Last updated: Today at "+timed
+    Header = '|User|Score|\n|:-:|:-:|\n'
+    commentlist = []
+    for submission in reddit.subreddit(subreddit).top(timescale, limit=posts):
+        if submission.score > 20:
+            for comment in submission.comments.list():
+                if comment.score>scorelimit:
+                        commentlist.append([str(comment.author),comment.score,str(comment.permalink)])
+            comments_Top = sorted(commentlist, key=itemgetter(1), reverse=True)
+            info = []
+    for comment in comments_Top:
+        user = "u/" + comment[0]
+        score = str(comment[1])
+        url = "https://reddit.com/"+comment[2]
+        row = user + "|[" + score + "](" + url + ")\n"
+        info.append(row)
+    for i in range(0, len(info)):
+        Header = Header + info[i]
+    Header = Header + status
+    return Header
 
 
-# Function to respond if we're rate-limited
-# This doesn't happen much unless it's a new account, or you're spamming
-def rateLimit(error,comment):
-    timeleft = ((error.split("try again in "))[1].split(" minute"))[0]
-    part_1 = "We're being rate-limited...stupid Reddit."
-    part_2 = error
-    part_3 = "Sleeping for " + timeleft + " minutes until I can comment again..."
-    link = "(" + str(comment.permalink) + ")"
-    outOfJail = "Okay, ratelimit should be over"
-    message = part_1 + "\n" + link + "\n" + part_2 + "\n" + part_3
-    sendMessage(message)
-    sendMessage(link)
-    sleep((int(timeleft) * 60) + 1)
-    sendMessage(outOfJail)
+def main():
+    while True:
+        widgets = getWidget()
+        postUpdateWeek = widgets[0].mod.update(text=getPosts("week"))
+        postUpdateDay = widgets[2].mod.update(text=getPosts("day"))
+        commentUpdate = widgets[1].mod.update(text=getComments(50,"week","pantypeel",5))
+        healthCheckerPing()
+        sleep(60)
 
-
-# Let Telegram know we're running
-sendMessage("Simon Skinner is powering up")
-
-# Let the console know we're running
-print(consoleoutput[0])
-
-'''
-Counting Upvotes
-
-The actual counting will take shape like this, the bot can stream
-comments / posts and record the upvote count for each.  Need to
-look up the code, though.
-
-One processed, this will spit out an array of the top 100 comments and top 100 posts
-from a varying length of time, along with the user and the upvote count
-
-Another function will take this data and organize it into a table, then 
-post it as a comment on the sub.
-
-'''
-for comment in subreddit.stream.comments():
-    print("In progress")
-
-for submission in subreddit.stream:
-    print("In progress")
-
-
-'''
-Updating the Sidebar
-
-Seems like this is possible, but the bot must be a mod for the sub.
-
-'''
-
-subreddit.mod.update(description="new sidebar goes here")
-
-old_sidebar = subreddit.mod.settings()['description']
+main()
