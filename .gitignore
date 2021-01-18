@@ -4,6 +4,6 @@ venv/
 SECRET/
 __pycache__/
 
-
+secret.py
 *.log
 
