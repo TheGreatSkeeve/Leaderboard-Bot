@@ -1,8 +1,9 @@
 db/
 .idea/
-comment_list.txt
-*.log
-SECRET/secret.py
-secret.py
 venv/
-__pycache__/*
+SECRET/
+__pycache__/
+
+
+*.log
+
