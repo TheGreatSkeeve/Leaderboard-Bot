@@ -34,3 +34,13 @@ def rateLimit(error,comment):
     sendMessage(link)
     sleep((int(timeleft) * 60) + 1)
     sendMessage(outOfJail)
+
+
+for submission in submissions:
+    x = submission.created
+    ts = int(x)
+    print(ts)
+    month = datetime.utcfromtimestamp(ts).strftime('%m')
+    print(month)
+    if month == "02":
+        print(datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S'))

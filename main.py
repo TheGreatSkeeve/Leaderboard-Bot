@@ -16,7 +16,7 @@ reddit = praw.Reddit(
 )
 
 subreddit = reddit.subreddit(target_sub)
-testsubreddit = reddit.subreddit(testsub)
+subreddit_test = reddit.subreddit(target_sub_test)
 
 
 def wiki_create(pageName,content,reason):
@@ -28,7 +28,7 @@ def wiki_setup(subreddit):
     content=["2020 Leaderboard","2021 Leaderboard"]
     reason="Initial Wiki Leaderboard Setup"
     for i in range(0,len(pagename)):
-        subreddit.wiki.create(pagename[i],content[i],reason)
+        subreddit_test.wiki.create(pagename[i],content[i],reason)
 
 
 def newTextWidget(subreddit,title,content):
@@ -37,6 +37,11 @@ def newTextWidget(subreddit,title,content):
     text_area = widgets.mod.add_text_area(title,content, styles)
 
 # newTextWidget(subreddit, "Monthly Leaderboard","Pending")
+
+def editWiki(subreddit,content,page="2021-Leaderboard"):
+    page = subreddit.wiki[page]
+    page.edit(content)
+
 
 page = subreddit.wiki['index']
 
@@ -52,65 +57,76 @@ def getWidget(subreddit):
 # This is super specialized, need to break it up
 # Need to set some kind of config file, too..
 
-# There is wholeheartedly a better way to do this.
-def getPosts(subreddit,timerange):
-
-    timed = datetime.now().strftime("%H:%M:%S")
-    status = "\n\n"+"Last updated: Today at "+timed
-    Header = '|User|Score|\n|:-:|:-:|\n'
-    info = []
-    timerange = "month"
-    submissions = testsubreddit.top(timerange,limit=250)
-    done=False
-    for submission in submissions:
-        if len(info)>0:
-            print(len(info))
-            for i in range(0,len(info)):
-                try:
-                    val = info[i].index(str(submission.author))
-                    info[val][1] = info[val][1] + submission.score
-                    done=True
-                except:
-                    pass
-        else:
-            info.append([str(submission.author), submission.score])
-        if done==False:
-            info.append([str(submission.author), submission.score])
-
-    total = 0
-    for i in range(0,len(info)):
-        try:
-            loc = info[i].index("GaramaMasala2020")
-            total = total + info[loc][1]
-        except:
-            pass
-
-
-
-    submissions_Top = sorted(info, key=itemgetter(1),reverse=True)
-    info = []
-    for submission in submissions_Top:
-        user="u/"+submission[0]
-        score=str(submission[1])
-        row=user+"|"+score+"\n"
-        info.append(row)
-    for i in range(0,len(info)):
-        Header = Header + info[i]
-    Header = Header+status
-    return Header
 
 def healthCheckerPing():
     import requests
     url = "https://hc-ping.com/86d42e5c-5ec3-4e48-89f0-9e9a7c2834b6"
     requests.get(url)
 
+def getScores(subreddit,timerange,limit):
+    # Gets the top 250 posts
+    submissions = subreddit.top(timerange,limit=limit)
+    info = []
 
+    # Big loop to find users and posts and scores
+    for submission in submissions:
+        user=submission.author
+        if str(user)=="None":
+            pass
+        else:
+            score=submission.score
+            now = datetime.now().strftime('%m')
+            month = datetime.utcfromtimestamp(int(submission.created)).strftime('%m')
+            if timerange=="all":
+                now=month
+            if now==month:
+                # If no posts have been added yet, append the first user
+                if info == []:
+                    info.append([user,score])
+                else:
+                    found=False
+                    # Search through the info array to see if the username exists.  Add the score to that user's score, or
+                    # add that user and their base score to the info array
+                    for i in range(0,len(info)):
+                        if user==info[i][0]:
+                            found=True
+                            info[i][1] = info[i][1] + score
+                    if found==False:
+                        info.append([user,score])
+    info = sorted(info, key=itemgetter(1),reverse=True)
+    return info
+
+def makeTable(info):
+    table = []
+    for i in range(0,len(info)):
+        user="u/"+str(info[i][0])
+        score=str(info[i][1])
+        number="#"+str(i+1)
+        row=number+"|"+user+"|"+score+"\n"
+        table.append(row)
+    timed = datetime.now().strftime("%H:%M:%S")
+    status = "\n\n"+"Last updated: Today at "+timed
+    Header = '|Place|User|Score|\n|:-:|:-:|:-:|\n'
+    if len(table)>24:
+        x=25
+    else:
+        x=len(table)
+    for i in range(0,x):
+        Header = Header + table[i]
+    table = Header+status
+    return table
 
 def main():
     while True:
-        widget = getWidget(subreddit)
-        widget.mod.update(text=getPosts(testsubreddit,"month"))
-        healthCheckerPing()
-        sleep(15)
+        # Update Sidebar
+        monthly = makeTable(getScores(subreddit,"month", 250))
+        widget = getWidget(subreddit_test)
+        widget.mod.update(text=monthly)
+        print("Sidebar updated")
+
+        # Update Wiki
+        alltime=makeTable(getScores(subreddit,"all",10000))
+        editWiki(subreddit_test, alltime)
+        sleep(60)
 
 main()
